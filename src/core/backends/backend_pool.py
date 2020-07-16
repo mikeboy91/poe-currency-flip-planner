@@ -102,7 +102,7 @@ class BackendPool:
             BackendPoolWorker(PoeOfficial(item_list), self.event_loop, Throttler(2, 3)),
         ]
 
-    def schedule(self, league: str, item_pairs: List[Tuple[str, str]],
+    async def schedule(self, league: str, item_pairs: List[Tuple[str, str]],
                  item_list: ItemList, limit: int = 10) -> List[Offer]:
 
         for p in item_pairs:
@@ -111,10 +111,10 @@ class BackendPool:
 
         coroutines = [backend.work(self.queue, self.client_session) for backend in self.backends]
 
-        (done, _pending) = self.event_loop.run_until_complete(asyncio.wait(coroutines))
+        (done, _pending) = await asyncio.ensure_future(asyncio.wait(coroutines))
         results: List[List[Dict]] = [x.result() for x in done]
 
-        self.event_loop.run_until_complete((self.event_loop.create_task(self.client_session.close())))
+        await asyncio.ensure_future((self.event_loop.create_task(self.client_session.close())))
 
         for worker in self.backends:
             logging.debug("Worker {}: {} tasks".format(worker.backend.name(), worker.counter))

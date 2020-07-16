@@ -65,25 +65,25 @@ class PathFinder:
             "results": self.results,
         }, unpicklable=False, indent=2)
 
-    def _filter_traders(self, offers: List[Offer], excluded_traders) -> List:
+    async def _filter_traders(self, offers: List[Offer], excluded_traders) -> List:
         excluded_traders = [name.lower() for name in excluded_traders]
         return list(filter(lambda x: x.contact_ign.lower() not in excluded_traders, offers))
 
-    def _fetch(self):
+    async def _fetch(self):
         t_start = time.time()
 
         logging.info("Fetching {} offers for {} pairs".format(
             self.league, len(self.item_pairs)))
 
-        self.offers = self.backend_pool.schedule(self.league, self.item_pairs, self.item_list)
+        self.offers = await self.backend_pool.schedule(self.league, self.item_pairs, self.item_list)
 
         # Filter out unwanted traders
-        self.offers = self._filter_traders(self.offers, self.excluded_traders)
+        self.offers = await self._filter_traders(self.offers, self.excluded_traders)
 
         t_end = time.time()
         logging.info("Spent {}s fetching offers".format(round(t_end - t_start, 2)))
 
-    def _build_graph(self):
+    async def _build_graph(self):
         t_start = time.time()
         self.graph = graph.build_graph(self.offers)
         t_end = time.time()
@@ -120,7 +120,7 @@ class PathFinder:
         if self.logging:
             logging.info("Spent {}s finding paths".format(round(t_end - t_start, 2)))
 
-    def run(self, max_transaction_length=2):
-        self._fetch()
-        self._build_graph()
+    async def run(self, max_transaction_length=2):
+        await self._fetch()
+        await self._build_graph()
         self._find_profitable_paths(max_transaction_length)

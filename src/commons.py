@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Tuple
 import numpy as np
+import os
 
 league_names = ["Harvest", "Hardcore Harvest", "Standard", "Hardcore"]
 
@@ -29,7 +30,7 @@ def init_logger(debug: bool):
 
 
 def load_excluded_traders():
-    default_path = "config/excluded_traders.txt"
+    default_path = os.path.dirname(os.path.abspath(__file__)) + "/../config/excluded_traders.txt"
     with open(default_path, "r") as f:
         excluded_traders = [x.strip() for x in f.readlines()]
         return excluded_traders
