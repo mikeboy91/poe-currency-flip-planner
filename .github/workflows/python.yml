@@ -22,13 +22,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Setup Pipenv
-        uses: dschep/install-pipenv-action@v1
+      - name: Setup Poetry
+        uses: dschep/install-poetry-action@v1.2
+        with:
+          python_version: ${{ matrix.python-version }}
 
-      - name: Dependencies
-        run: |
-          pipenv install --dev
+      - name: Cache Poetry
+        uses: actions/cache@v1
+        id: cache
+        with:
+          path: ~/.virtualenvs
+          key: poetry-$
+          restore-keys: |
+            poetry-$
+
+      - name: Install dependencies
+        run: poetry install
+        if: steps.cache.outputs.cache-hit != 'true'
 
       - name: Tests
-        run: |
-          pipenv run python -m pytest
+        run: poetry run python -m pytest

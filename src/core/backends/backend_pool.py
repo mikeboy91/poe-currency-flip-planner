@@ -1,7 +1,5 @@
 import asyncio
 import logging
-from dataclasses import dataclass
-from queue import LifoQueue
 from typing import Any, Dict, List, Tuple
 
 import aiohttp
@@ -10,7 +8,7 @@ from asyncio_throttle import Throttler
 from src.core.offer import Offer
 from src.core.backends.poeofficial import PoeOfficial
 from src.core.backends.poetrade import PoeTrade
-from src.core.backends.task import Task, TaskException
+from src.core.backends.task import Task
 from src.trading import ItemList
 
 
@@ -22,7 +20,8 @@ class BackendPoolWorker:
     just_failed: bool
     work_index: Dict[int, Task]
 
-    def __init__(self, backend: Any, loop: asyncio.AbstractEventLoop, rate_limiter: Throttler):
+    def __init__(self, backend: Any, loop: asyncio.AbstractEventLoop,
+                 rate_limiter: Throttler):
         self.backend = backend
         self.loop = loop
         self.rate_limiter = rate_limiter
@@ -48,11 +47,14 @@ class BackendPoolWorker:
 
     async def handle_error(self):
         if self.just_failed is True:
-            logging.debug("Backend {} failed: Time penalty...".format(self.backend.name()))
+            logging.debug("Backend {} failed: Time penalty...".format(
+                self.backend.name()))
             await asyncio.sleep(15)
             self.just_failed = False
 
-    async def work(self, queue: asyncio.Queue, client_session: aiohttp.ClientSession) -> List[Any]:
+    async def work(self, queue: asyncio.Queue) -> List[Any]:
+        client_session = aiohttp.ClientSession()
+
         while not queue.empty():
             await self.rate_limiter.acquire()
 
@@ -69,8 +71,9 @@ class BackendPoolWorker:
             for idx, result in enumerate(done):
                 if isinstance(result, Exception):
                     failed_task = self.work_index[idx]
-                    logging.debug("{}: Reschedule task: {} -> {}".format(self.backend.name(),
-                                                                         failed_task.have, failed_task.want))
+                    logging.debug("{}: Reschedule task: {} -> {}".format(
+                        self.backend.name(), failed_task.have,
+                        failed_task.want))
                     logging.debug(result)
                     queue.put_nowait(failed_task)
                     self.counter = self.counter - 1
@@ -82,6 +85,8 @@ class BackendPoolWorker:
 
             await self.handle_error()
 
+        await client_session.close()
+
         return self.results
 
 
@@ -90,16 +95,16 @@ class BackendPool:
     item_list: ItemList
     queue: asyncio.Queue
     event_loop: asyncio.AbstractEventLoop
-    client_session: aiohttp.ClientSession
 
     def __init__(self, item_list: ItemList):
         self.queue = asyncio.Queue()
         self.event_loop = asyncio.get_event_loop()
-        self.client_session = aiohttp.ClientSession()
         self.item_list = item_list
         self.backends = [
-            BackendPoolWorker(PoeTrade(item_list), self.event_loop, Throttler(10, 1)),
-            BackendPoolWorker(PoeOfficial(item_list), self.event_loop, Throttler(2, 3)),
+            BackendPoolWorker(PoeTrade(item_list), self.event_loop,
+                              Throttler(10, 1)),
+            BackendPoolWorker(PoeOfficial(item_list), self.event_loop,
+                              Throttler(2, 3)),
         ]
 
     async def schedule(self, league: str, item_pairs: List[Tuple[str, str]],
@@ -109,7 +114,7 @@ class BackendPool:
             new_task = Task(league, p[0], p[1], limit, False)
             self.queue.put_nowait(new_task)
 
-        coroutines = [backend.work(self.queue, self.client_session) for backend in self.backends]
+        coroutines = [backend.work(self.queue) for backend in self.backends]
 
         (done, _pending) = await asyncio.ensure_future(asyncio.wait(coroutines))
         results: List[List[Dict]] = [x.result() for x in done]
@@ -117,7 +122,8 @@ class BackendPool:
         await asyncio.ensure_future((self.event_loop.create_task(self.client_session.close())))
 
         for worker in self.backends:
-            logging.debug("Worker {}: {} tasks".format(worker.backend.name(), worker.counter))
+            logging.debug("Worker {} finished {} tasks".format(
+                worker.backend.name(), worker.counter))
 
         # Restructure list of lists to a single list of offer dicts
         derp: List[Offer] = []
