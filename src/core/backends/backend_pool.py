@@ -101,7 +101,7 @@ class BackendPool:
         self.queue = asyncio.Queue()
         self.event_loop = asyncio.get_event_loop()
         self.item_list = item_list
-        self.client_session = asyncio.ClientSession()
+        self.client_session = aiohttp.ClientSession()
         self.backends = [
             BackendPoolWorker(PoeTrade(item_list), self.event_loop,
                               Throttler(10, 1)),
